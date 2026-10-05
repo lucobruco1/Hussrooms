@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HUS$ROOMS — EfficientZero lab</title>
+    <link rel="stylesheet" href="../ui/style.css" />
+    <style>
+      body { overflow: auto; }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+      h1 { color: var(--amber); letter-spacing: 0.18em; font-size: 20px; margin: 0 0 4px; }
+      h2 { color: var(--amber); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin: 22px 0 6px; }
+      .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+      .card { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 12px 14px; }
+      .stat { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+      .stat b { color: #fff3c0; }
+      .bar-row { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 1px 0; }
+      .bar-row span { width: 46px; color: var(--dim); }
+      .bar-row i { display: block; height: 7px; background: #6d86b8; border-radius: 2px; min-width: 1px; }
+      .bar-row.special i { background: #d06a4a; }
+      .bar-row b { width: 34px; text-align: right; color: var(--ink); font-weight: 500; }
+      button, .file {
+        background: rgba(232, 216, 138, 0.08); border: 1px solid var(--line); color: var(--ink);
+        padding: 5px 10px; border-radius: 3px; cursor: pointer; font: inherit; margin-right: 6px;
+      }
+      .file input { display: none; }
+      canvas { width: 100%; height: 90px; border: 1px solid var(--line); border-radius: 3px; }
+      .log { font-size: 11px; color: var(--dim); max-height: 120px; overflow: auto; }
+      .note { color: var(--dim); font-size: 11px; }
+      a { color: var(--amber); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>HUS$ROOMS / EFFICIENTZERO LAB</h1>
+      <div class="note">
+        A headless instance of the same simulator and the same neural networks, running in a Web Worker
+        as fast as this machine can go. The player is a scripted stand-in that flees; Clark is the learner.
+        Nothing here is scripted hunting — he only ever sees a 12×12 m egocentric crop and 13 scalars.
+      </div>
+      <div style="margin-top: 12px">
+        <button id="start">start / resume</button>
+        <button id="pause">pause</button>
+        <button id="save">save checkpoint</button>
+        <label class="file">load checkpoint <input type="file" id="load" accept=".json" /></label>
+        <label class="file" style="margin-left: 8px">profile
+          <select id="profile" style="background: #221f10; color: var(--ink); border: 1px solid var(--line); border-radius: 3px; padding: 4px">
+            <option value="live">live (10 Hz decisions, 10 sims)</option>
+            <option value="turbo">turbo (15 Hz decisions, 24 sims)</option>
+          </select>
+        </label>
+        <span class="note" id="state">idle</span>
+      </div>
+
+      <div class="cols" style="margin-top: 18px">
+        <div class="card">
+          <h2>Cap'n Clark</h2>
+          <div id="clark-stats"></div>
+          <canvas id="clark-spark" width="420" height="90"></canvas>
+          <div id="clark-bars"></div>
+        </div>
+        <div class="card">
+          <h2>Survivor bots</h2>
+          <div id="bot-stats"></div>
+          <canvas id="bot-spark" width="420" height="90"></canvas>
+          <div id="bot-bars"></div>
+        </div>
+      </div>
+
+      <h2>Event log</h2>
+      <div class="card log" id="log"></div>
+      <h2>Honest status</h2>
+      <div class="card note" id="verdict"></div>
+    </div>
+    <script type="module" src="./lab-page.js"></script>
+  </body>
+</html>
