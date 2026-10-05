@@ -313,7 +313,8 @@ export class Networks {
       c.hiddenDim !== this.cfg.hiddenDim ||
       c.obsFrameDim !== this.cfg.obsFrameDim ||
       c.obsScalarDim !== this.cfg.obsScalarDim ||
-      c.actionDim !== this.cfg.actionDim
+      c.actionDim !== this.cfg.actionDim ||
+      c.projDim !== this.cfg.projDim
     ) {
       return false;
     }

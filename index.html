@@ -13,9 +13,20 @@
     <div id="loading">
       <div class="big">HUS$ROOMS</div>
       <div class="small">
-        Loading the level and the neural networks. Cap'n Clark begins this run with no idea what a
-        human is. Press <b>Tab</b> for the EfficientZero lab panel and watch him learn.
+        A small yellow level. Four survivors. One monster — Cap'n Clark, a Still Life controlled by an
+        EfficientZero agent that starts this run knowing nothing at all: no chase logic, no targeting,
+        no waypoints. If he comes for you, it is because reward and search taught him to.<br /><br />
+        <b>W A S D</b> move · <b>Shift</b> run (watch your breath) · mouse or <b>← →</b> look ·
+        <b>click</b> fire · <b>Tab</b> his search tree
       </div>
+      <div class="buttons">
+        <button id="start-fresh">Start fresh — he knows nothing</button>
+        <button id="start-trained" title="Loads public/brain-pretrained.json if it is present">
+          Load the trained Clark
+        </button>
+        <a href="src/ai/lab.html">Training lab →</a>
+      </div>
+      <div class="small tiny" id="start-note"></div>
     </div>
 
     <script type="module" src="src/main.js"></script>

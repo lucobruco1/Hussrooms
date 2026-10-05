@@ -3,6 +3,10 @@ node_modules/
 
 # trained brains / checkpoints (regenerate with tools/train.mjs)
 public/*.json
+# ...except the one shipped as evidence for docs/LEARNING.md run #5: the first
+# brain that learned to hunt unaided. Load it with the "Load the trained Clark"
+# button on the start screen, or ?checkpoint=public/brain-pretrained.json.
+!public/brain-pretrained.json
 *.log
 
 # editor / OS noise

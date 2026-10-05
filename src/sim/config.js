@@ -155,12 +155,29 @@ export const REWARDS = {
   // locks onto it - an attractor that took two long training runs to diagnose.
   // This is a locomotion prior, not a hunting rule: it says "do something",
   // never "do what".
-  still: -0.006, // per tick with essentially no displacement
+  still: -0.004, // per tick with essentially no displacement
+  // Motion prior. Novelty runs out once the floor has been mapped, and after
+  // that "stand still" was strictly optimal whenever no prey was in perception:
+  // moving risked a wall bump and earned nothing, so the policy froze (measured:
+  // 59% idle, which is a dead policy). A small reward per metre travelled makes
+  // roaming weakly positive everywhere, which is what a predator needs to be.
+  // It cannot be farmed into a substitute for hunting: a bite is 1.2 and a kill
+  // is 8.0, against ~0.013/s for walking.
+  roam: 0.004, // per metre of ground actually covered (capped per tick)
+  roamCap: 0.01, // max roam reward per tick
   // --- predator ---
-  kill: 5.0, // killed a player or a bot (dominates everything else)
-  bite: 0.6, // landed a bite (killed or not)
-  closing: 0.45, // per metre closed on a target he can currently perceive
-  orient: 0.4, // per unit of cos(bearing) gained turning to face it
+  kill: 8.0, // killed a player or a bot (dominates everything else)
+  bite: 1.2, // landed a bite (killed or not) - a bite now very often leads to a
+  //             kill thanks to the stagger, so this is the reward that
+  //             actually bootstraps hunting
+  // Approach shaping, applied as *potentials* rather than per-tick payments:
+  // the reward for a step is Phi(after) - Phi(before), so oscillating or
+  // circling nets exactly zero while approaching nets the full difference.
+  // Per-tick "you closed 2 cm" payments are farmable by any periodic motion,
+  // and a farmed shaping term is what a policy learns instead of hunting.
+  closing: 0.45, // Phi_close = -closing * distance  (while the target is perceived)
+  orient: 0.4, // Phi_face = orient * cos(bearing to target)
+  near: 1.2, // Phi_near = near * (1 - min(d,3)/3): crossing into bite range pays
   lungeHit: 0.3, // connected with a lunge
   roarUseful: 0.05, // roar that dazed at least one agent
   clarkNovelty: 0.15, // first visit to a cell: keeps him searching the floor
@@ -288,7 +305,9 @@ export const EZ_PROFILES = {
     batch: 12,
     sims: 24,
     maxDepth: 8,
-    decisionInterval: 4, // 15 Hz
+    decisionInterval: 2, // 30 Hz: at bite range a committed action can carry him
+    //                      clear past his target, and sharpening close-quarters
+    //                      control is worth more than the extra search cost
     lr: 0.0012,
     warmupActions: 220,
     consistEveryK: 2,

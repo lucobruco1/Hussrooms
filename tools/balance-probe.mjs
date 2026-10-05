@@ -176,7 +176,48 @@ function run(label, { seconds = 45, clarkPolicy, botPolicy, startDist = 10 }) {
   return { minDist, bites, firstBiteAt, firstKillAt };
 }
 
+/**
+ * Reward ordering check: does the reward stream actually prefer hunting?
+ * A hand-written hunter and a hand-written idler are run in the same world for
+ * the same 60 s and their accumulated reward is compared. If the idler wins,
+ * no amount of learning will produce a monster, and the shaping (not the agent)
+ * is what needs fixing.
+ */
+function rewardOrdering(seconds = 60) {
+  const out = {};
+  for (const mode of ['hunter', 'idler', 'flee-only']) {
+    const w = freshWorld();
+    const { clark, bot } = place(w, 10);
+    let rngState = 99;
+    const rnd = () => {
+      rngState = (rngState * 1103515245 + 12345) & 0x7fffffff;
+      return rngState / 0x7fffffff;
+    };
+    let total = 0;
+    for (let i = 0; i < Math.round(seconds / PHYS.dt); i++) {
+      w.setAction(clark, mode === 'idler' ? A.idle : greedyClarkAction(w, clark));
+      if (bot.alive) {
+        w.setAction(bot, mode === 'flee-only' ? fleeBotAction(w, bot, clark) : Math.floor(rnd() * 11));
+        bot.sprinting = mode === 'flee-only';
+      }
+      total += clark.pendingReward;
+      clark.pendingReward = 0;
+      w.step(PHYS.dt);
+      total += clark.pendingReward;
+      clark.pendingReward = 0;
+    }
+    out[mode] = total / w.t;
+  }
+  console.log(
+    `reward/s for Clark: hunter ${out.hunter.toFixed(3)} · idler ${out.idler.toFixed(3)} · ` +
+      `vs fleeing prey ${out['flee-only'].toFixed(3)} (hunter must beat idler)`,
+  );
+  return out;
+}
+
 console.log('=== reachability of a kill (no learning involved) ===');
+rewardOrdering();
+
 run('random Clark vs random prey @10m', { clarkPolicy: 'random', botPolicy: 'random', startDist: 10 });
 run('random Clark vs random prey @4m', { clarkPolicy: 'random', botPolicy: 'random', startDist: 4 });
 run('greedy Clark vs random prey @10m', { clarkPolicy: 'greedy', botPolicy: 'random', startDist: 10 });

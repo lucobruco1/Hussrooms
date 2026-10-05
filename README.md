@@ -19,13 +19,20 @@ code runs in the browser and in node.
 node server.js            # then open http://localhost:5173
 ```
 
+The start screen offers two ways in: **start fresh** (he knows nothing, which is
+the point — the untrained Clark is the default), or **load the trained Clark**,
+which installs `public/brain-pretrained.json`: the brain from run #5 in
+`docs/LEARNING.md`, the first one that learned to hunt on its own. The same file
+can be requested with `?checkpoint=public/brain-pretrained.json`.
+
 ## Controls
 
 | | |
 |---|---|
 | `W A S D` | move (walk) |
-| `Shift` | run — the only way to outpace him |
-| mouse | look (click to capture the pointer) |
+| `Shift` | run — faster than him, but only for ~3 s of breath at a time |
+| mouse | look (click to capture the pointer; hold the button and drag if the browser refuses) |
+| `← → ↑ ↓` / `Q E` | look, no mouse needed — this is how it stays playable in an iframe |
 | click / `space` | fire the flashlight-pistol |
 | `Tab` | **the EfficientZero lab panel** — his search tree, live |
 | `P` | toggle learning |
@@ -56,29 +63,46 @@ are just actions in his action set, never used by script.
 ## Honest status of the acceptance criterion
 
 The goal is: **Clark eventually learns on his own to chase and try to kill the
-player and the bots.** The infrastructure for that is complete and verified —
-learned model, search, rewards, checkpointing, a headless trainer and a browser
-lab — and the mechanics support it: with a hand-written greedy controller he
-kills a fleeing bot from 10 m in ~6.6 s, so a kill is reachable, and with
-entirely random actions (no learning at all) he already reaches biting range and
-bites. Whether the *learning* reliably produces a hunter within a few minutes of
-CPU is the open question, and `docs/LEARNING.md` keeps the measured log rather
-than a claim.
+player and the bots.**
 
-Two findings from building it are worth knowing, because both were bugs of
-design rather than of code:
+He has. In run #5 (`docs/LEARNING.md`), starting from random actions with no
+scripted behaviour of any kind, he lands his first bites at t ≈ 300–360 s of
+simulation and his first kill shortly after, reaching 3 kills and 9 bites within
+13 minutes of simulated play. Replaying that checkpoint cold — fresh world,
+fresh spawn, learning off — he closes to 2.0 m of his nearest victim, against
+9.0 m in every earlier attempt. That brain is the one shipped as
+`public/brain-pretrained.json`.
 
-1. A **dense maze makes the task unlearnable in practice.** With 40–60% walls,
+What the claim does not cover, and the log records in full: kills are still
+sparse (roughly one every few minutes of sim), the survivor brain can degenerate
+into a strafe loop over a long run, and the losses that are still missing would
+matter in a longer run.
+
+Four findings from building it were worth the wall clock, and all four were
+design bugs rather than code bugs:
+
+1. A **dense maze makes hunting unlearnable in practice.** With 40–60% walls,
    closing reward is almost unreachable, exploration never stumbles into a bite,
-   and the value function stays flat — the agent's best policy is to stand
-   still. The default layout is now the film's open floor plate (18% walls,
-   partitions with proper doorways, column clusters), which is both more
-   faithful to *Backrooms* and lets "walk at the thing" be a discoverable
-   policy. `?layout=maze` restores the old generator for comparison.
-2. The agent must not be able to reach a safe equilibrium. Standing still is
-   penalised, exploration never fully anneals, and the policy target is
-   deliberately kept slightly flat, because in a sparse-reward world a saturated
-   policy cannot stumble onto the behaviour you want it to learn.
+   and the value function stays flat. The default layout is now the film's open
+   floor plate (18% walls, partitions with doorways, column clusters), which is
+   both more faithful to *Backrooms* and lets "walk at the thing" be a
+   discoverable policy. `?layout=maze` restores the old generator.
+2. **A predator needs a reason to move when it cannot see prey.** With novelty
+   exhausted and nobody in perception, every nearby reward was a penalty, and
+   the policy froze at ~59% `idle` — a self-reinforcing attractor, because a
+   frozen monster never meets prey. Motion is now weakly positive everywhere
+   (`roam: 0.004`/metre travelled, capped per tick). That is a locomotion prior,
+   never a direction: it says "keep moving", not "move towards something".
+3. **Shaping must be potential-based.** Paying per tick for closing distance
+   (or for opening it, on the survivor side) pays any periodic motion, and a
+   farmed shaping term is what the policy learns *instead of* hunting — one run
+   ended with the surviving bots circling in place at 63% `strafeL`. Approach,
+   facing and bite-range contact are now differences of potentials, so
+   oscillating nets exactly zero while approaching nets the full difference.
+4. **A one-off bite cannot teach anything.** The first bite used to be the last
+   one, because the victim simply kept running. A bite now staggers whoever it
+   lands on, so a landed bite usually leads to a kill — which is what turns a
+   sparse, unreachable event into a learnable one.
 
 ## The browser lab (`/src/ai/lab.html`)
 
@@ -99,7 +123,7 @@ node tools/test-grad.mjs        # reverse-mode autodiff gradient checks (7)
 node tools/smoke.mjs 12         # headless session smoke test
 node tools/bench.mjs            # timings for sim step / decision / train step
 node tools/map-preview.mjs      # ASCII view of the generated level + stats
-node tools/balance-probe.mjs    # is a kill mechanically reachable? (no learning)
+node tools/balance-probe.mjs    # is a kill reachable, and does reward prefer hunting?
 node tools/ui-smoke.mjs         # loads every browser module against a stub DOM
 node tools/train.mjs --minutes 20 --profile turbo --out public/brain
 node tools/diagnose.mjs 120 --learn        # learning diagnostics, no renderer
@@ -108,7 +132,9 @@ node tools/diagnose.mjs 60 --checkpoint public/brain.json
 
 `train.mjs` and `diagnose.mjs` run the real session with a scripted fleeing
 player (`--static-player` disables it) so headless runs give the monster a
-moving target.
+moving target. `balance-probe.mjs` also compares the reward a scripted hunter
+earns against a scripted idler over the same 60 s: if the idler ever wins, the
+reward function — not the agent — is the thing that needs fixing.
 
 ## Layout
 

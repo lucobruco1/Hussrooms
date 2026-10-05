@@ -184,7 +184,20 @@ html, body {
 }
 #loading.hidden { display: none; }
 #loading .big { font-size: 22px; letter-spacing: 0.2em; }
-#loading .small { color: var(--dim); max-width: 460px; font-size: 12px; }
+#loading .small { color: var(--dim); max-width: 560px; font-size: 12px; }
+#loading .tiny { font-size: 11px; opacity: 0.8; }
+#loading .buttons { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+#loading .buttons button {
+  background: rgba(232, 216, 138, 0.1);
+  border: 1px solid var(--line);
+  color: var(--amber);
+  padding: 9px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+#loading .buttons button:hover { background: rgba(232, 216, 138, 0.2); }
+#loading .buttons a { color: var(--dim); font-size: 11px; }
 
 @media (max-width: 820px) {
   .lab-grid { grid-template-columns: 1fr; }

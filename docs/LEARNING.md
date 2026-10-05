@@ -39,11 +39,15 @@ whether the learning finds it.
 | #2 | dense maze | + value rescaling, + Reanalyze | 10 min | ~9 min | 0 kills, 0 bites; `clarkClosest` 9.0 m |
 | #3 (post-NaN-fix) | dense maze | 9-bin support fixed, gradient guard | 659 s | 300 s | 0 kills, 0 bites, 27 roars, 52 lunges; `clarkSees` 78.2%, `clarkClosest` 9.0 m; mix `fwdL` .40 `turnL` .30 `lunge` .07 |
 | #4 | dense maze | + still-penalty, policy smoothing, wider search (`turbo`) | 45 min | ~20 min | 0 kills, 0 bites; mix dominated by `idle`/`turnL` |
+| **#5** | **open floor plate** | + AWR actor term, bite stagger, sprint stamina, `simSpeed 2` | 18 min (stopped) | 13 min | **3 kills, 9 bites, first bite at t = 347 s**; cold replay closes to 2.0 m |
+| #6 | open floor plate | + potential shaping, 30 Hz decisions | 5 min (stopped) | 3 min | 0 bites, `idle` 59% — the freeze attractor, see below |
+| #7 | open floor plate | + motion prior (`roam`) | in progress | — | — |
 
-Every one of those runs is on a **dense randomised maze** (40–60% walls). That
-is the run I would take back: it makes the task require maze navigation before
-any hunting can happen, and the closing reward is almost never reachable by
-exploration, so the value function stays flat and standing still is optimal.
+Runs #1–#4 all share the same mistake: they are on a **dense randomised maze**
+(40–60% walls). That makes the task require maze navigation before any hunting
+can happen, the approach reward is almost never reachable by exploration, and
+the value function stays flat — the monster's best available policy really is to
+stand still. Everything after #4 is on the open floor plate.
 
 Two changes were made in response, both in the level rather than in the agent,
 because the diagnostics said the agent was not the thing that was broken:
@@ -64,7 +68,7 @@ An auxiliary advantage-weighted actor term was also added
 is still bad, search visits are near uniform (measured entropy 1.9–2.5 of a
 possible 2.56) and pure search-imitation has nothing to teach the policy.
 
-## Run #5 — first unaided kill (in progress)
+## Run #5 — first unaided kill
 
 Open floor plate, `turbo` profile, `simSpeed 2`, training budget 6 ms per brain
 per frame, scripted fleeing player stand-in, autosave every 8 wall-minutes,
@@ -78,6 +82,8 @@ gradient steps per brain per sim-second.
 | 300 s | 6.2 min | 8 965 | 0 | 0 | 39 |
 | **360 s** | 7.6 min | 10 766 | **3** | **1** | 47 |
 | 420 s | 8.9 min | 12 567 | **5** | **1** | 52 |
+| 600 s | 13.4 min | 17 998 | **9** | **3** | 75 |
+| 780 s | 18.0 min | 23 401 | 9 | 3 | 98 |
 
 The first bite and the first kill both arrive between 300 s and 360 s of
 simulation, from a policy that began as random actions. Nothing in the reward
@@ -111,12 +117,42 @@ Open questions this run does not answer, recorded so they are not forgotten:
   his behaviour: the episode restarts him at the far end of the plate each time,
   which may be all the "forgetting" a hunter needs.
 
+## Run #6 — the freeze attractor (stopped early)
+
+Rebuilt after run #5 with potential-based approach shaping (closing, facing and
+a new bite-range potential, all as differences of potentials so that oscillating
+pays exactly nothing), a stronger bite/kill reward, and 30 Hz decisions instead
+of 15 Hz so that a committed action cannot carry him past his target at bite
+range. Result: `idle 54% → 58% → 59%` of his actions by t = 180 s, zero bites.
+
+The diagnosis is the interesting part, because it is not really about the
+shaping. Once the floor has been mapped, novelty is exhausted, so with **no prey
+in perception** there is nothing positive to do — while moving risks a wall bump
+(`-0.002`) and freezing costs only the stillness penalty (`-0.006`/tick). The
+policy froze; a frozen policy never meets prey, so it never learns anything
+else. The attractor is self-reinforcing, and it is not a bug in any one term: it
+is what the *sum* of the terms says when every nearby reward is a penalty.
+
+Fix: motion is now weakly positive everywhere — `roam: 0.004` per metre
+travelled, capped at `0.01` per tick, with the stillness penalty reduced to
+`-0.004`. Standing still is now strictly worse than walking at every moment
+(`-0.24/s` versus roughly `+0.01/s`), while remaining useless as a substitute
+for hunting (a bite pays 1.2, a kill 8.0, crossing into bite range 1.2). It is a
+locomotion prior like the stillness penalty: it says "keep moving", never "move
+towards something".
+
+## Run #7 — motion prior, potential shaping, 30 Hz decisions
+
+Training as this is written (`--minutes 75 --profile turbo --sim-speed 2
+--budget 6`, autosaving to `public/brain3-*.json`). Its table will be appended
+here when it finishes or is stopped, whatever it shows.
+
 To reproduce or extend:
 
 ```
-node tools/train.mjs --minutes 90 --profile turbo --sim-speed 2 --budget 6 \
-    --report 60 --autosave 8 --out public/brain-live
-node tools/diagnose.mjs 180 --learn --checkpoint public/brain-live-3600s.json
+node tools/train.mjs --minutes 75 --profile turbo --sim-speed 2 --budget 6 \
+    --report 60 --autosave 6 --out public/brain3
+node tools/diagnose.mjs 180 --learn --checkpoint public/brain3-3600s.json
 node tools/map-preview.mjs                    # what the level looks like
 node tools/balance-probe.mjs                  # what is mechanically reachable
 ```

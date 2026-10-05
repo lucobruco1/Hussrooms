@@ -10,6 +10,8 @@
  * imports and that no code path touches a missing field or API.
  */
 
+import { readFileSync } from 'node:fs';
+
 class StubCtx {
   constructor() {
     this.fillStyle = '';
@@ -104,19 +106,39 @@ globalThis.window = {
   addEventListener: (t, fn) => (listeners[t] ||= []).push(fn),
   removeEventListener: () => {},
 };
+const byId = new Map();
 globalThis.document = {
   createElement: (tag) => new StubEl(tag),
+  getElementById: (id) => {
+    if (!byId.has(id)) byId.set(id, new StubEl('div'));
+    return byId.get(id);
+  },
   addEventListener: (t, fn) => (listeners[t] ||= []).push(fn),
   removeEventListener: () => {},
   pointerLockElement: null,
   body: new StubEl('body'),
 };
+globalThis.location = { search: '?start=1&quality=low' }; // drives the real frame loop
 globalThis.performance = globalThis.performance || { now: () => Date.now() };
-globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 16);
+// The real frame loop calls WebGLRenderer.render(), and there is no WebGL here,
+// so the loop is not allowed to schedule itself: importing src/main.js still
+// exercises the wiring (params, element lookups, session/renderer/hud/lab
+// construction, the start-screen buttons), and the per-frame functions are
+// driven by hand further down.
+globalThis.requestAnimationFrame = () => 0;
 globalThis.URL.createObjectURL = () => 'blob:stub';
 globalThis.URL.revokeObjectURL = () => {};
 globalThis.confirm = () => false;
-globalThis.fetch = globalThis.fetch || (async () => ({ ok: false }));
+// Serve the real shipped checkpoint through the fake fetch, so the browser
+// code path that derives its architecture profile and installs it is tested.
+globalThis.fetch = async (url) => {
+  const u = String(url);
+  if (u.includes('brain-pretrained.json')) {
+    const body = readFileSync(new URL('../public/brain-pretrained.json', import.meta.url), 'utf8');
+    return { ok: true, json: async () => JSON.parse(body) };
+  }
+  return { ok: false, json: async () => null };
+};
 
 const THREE = await import('../src/three-shim.js');
 console.log('three.js version:', THREE.REVISION);
@@ -229,5 +251,41 @@ console.log('restored updates:', s2.clarkUpdates, 'replay:', s2.clarkReplay);
 // reset button path
 session.resetLearning();
 console.log('after resetLearning, clark updates:', session.clarkBrain.updates, 'firstKillAt:', session.stats.firstKillAt);
+
+// ------------------------------------------------- the real entry point
+await import('../src/main.js');
+const H = globalThis.window.HUSSROOMS;
+console.log('main.js booted:', !!H, '| entry session t =', H?.session.world.t.toFixed(2), '| profile =', H?.session.profile);
+// drive the real frame body (everything except the GL call)
+for (let i = 0; i < 90; i++) {
+  H.renderer.pumpInput(1 / 60);
+  H.session.frame();
+  H.renderer.sync(1 / 60);
+  H.hud.update(60);
+  H.lab.update();
+}
+const cam = H.renderer.camera.position;
+console.log('main.js frame body ran 90x | t =', H.session.world.t.toFixed(1), '| camera finite:', Number.isFinite(cam.x) && Number.isFinite(cam.y));
+console.log('loading overlay hidden:', byId.get('loading')?.classList.contains('hidden'));
+console.log(
+  'start buttons wired:',
+  (byId.get('start-fresh')?._listeners.click || []).length,
+  (byId.get('start-trained')?._listeners.click || []).length,
+);
+console.log('profile chosen for the shipped checkpoint:', H.profile, '| trained updates before click:', H.session.clarkBrain.updates);
+for (const fn of byId.get('start-trained')._listeners.click || []) fn();
+for (let i = 0; i < 30; i++) {
+  H.renderer.pumpInput(1 / 60);
+  H.session.frame();
+  H.renderer.sync(1 / 60);
+}
+console.log(
+  'after clicking "load trained Clark": updates =',
+  H.session.clarkBrain.updates,
+  '| value finite:',
+  Number.isFinite(H.clarkBrainValue ?? H.session.summary().clarkValue),
+  '| sim t =',
+  H.session.world.t.toFixed(1),
+);
 
 console.log('\nDOM/render harness completed with no exceptions.');

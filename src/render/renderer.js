@@ -91,12 +91,24 @@ export class Renderer {
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === el;
     });
+    // Look control has to work in two worlds: a normal tab (pointer lock) and
+    // an embedded preview iframe, where pointer lock may be unavailable. In the
+    // second case, holding the left mouse button and dragging turns the view,
+    // and the arrow keys turn it without any mouse at all.
+    this.dragging = false;
     document.addEventListener('mousemove', (ev) => {
-      if (!this.pointerLocked) return;
+      if (!this.pointerLocked && !this.dragging) return;
       const p = this.world.player;
       if (!p || !p.alive) return;
-      p.yaw -= ev.movementX * this.mouseSensitivity;
+      p.yaw -= ev.movementX * this.mouseSensitivity * (this.pointerLocked ? 1 : 1.6);
       this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - ev.movementY * this.mouseSensitivity));
+    });
+    window.addEventListener('mouseup', () => {
+      this.dragging = false;
+    });
+    window.addEventListener('blur', () => {
+      this.dragging = false;
+      this.keys.clear();
     });
     window.addEventListener('keydown', (ev) => {
       this.keys.add(ev.code);
@@ -104,11 +116,17 @@ export class Renderer {
         this.firing = 0.12;
         this.session.playerShoot();
       }
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'Space'].includes(ev.code)) ev.preventDefault();
+      if (
+        ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(
+          ev.code,
+        )
+      )
+        ev.preventDefault();
     });
     window.addEventListener('keyup', (ev) => this.keys.delete(ev.code));
     window.addEventListener('mousedown', (ev) => {
       if (ev.button === 0) {
+        this.dragging = true;
         this.firing = 0.12;
         this.session.playerShoot();
       }
@@ -116,8 +134,17 @@ export class Renderer {
   }
 
   /** Read the keyboard and push a discrete action into the simulator. */
-  pumpInput() {
+  pumpInput(dt = 1 / 60) {
     const k = this.keys;
+    const p = this.world.player;
+    // keyboard turning: works everywhere, including iframes that refuse
+    // pointer lock
+    if (p && p.alive) {
+      const turn = (k.has('ArrowLeft') || k.has('KeyQ') ? 1 : 0) - (k.has('ArrowRight') || k.has('KeyE') ? 1 : 0);
+      if (turn) p.yaw += turn * 2.2 * dt;
+      const look = (k.has('ArrowUp') ? 1 : 0) - (k.has('ArrowDown') ? 1 : 0);
+      if (look) this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch + look * 1.4 * dt));
+    }
     const fwd = k.has('KeyW') ? 1 : k.has('KeyS') ? -1 : 0;
     const strafe = k.has('KeyD') ? 1 : k.has('KeyA') ? -1 : 0;
     let action = A.idle;

@@ -385,6 +385,9 @@ export class World {
     const moved = Math.hypot(e.x - fromX, e.z - fromZ);
     e.stats.distance += moved;
     e.lastMoved = moved;
+    if (this.rewards.preset !== 'sparse' && moved > 0) {
+      e.pendingReward += Math.min(this.rewards.roamCap, moved * this.rewards.roam);
+    }
   }
 
   tryBite(clark) {
@@ -495,13 +498,23 @@ export class World {
         this.detectedPrev.set(e.id, prev);
       }
       const det = this.detected(e);
+      // Focus: the nearest perceived hostile. Which one is being tracked
+      // matters — world order would always put the player first, and the
+      // player is the one target that can outrun him.
+      let focus = null;
+      let focusD = Infinity;
+      for (const o of det) {
+        const d = dist(e, o);
+        if (d < focusD) {
+          focusD = d;
+          focus = o;
+        }
+      }
       if (isClark) {
         if (det.length) this.telemetry.clarkSees++;
-        for (const o of det) {
-          const d = dist(e, o);
-          if (d < this.telemetry.clarkClosest) this.telemetry.clarkClosest = d;
-        }
+        if (focus && focusD < this.telemetry.clarkClosest) this.telemetry.clarkClosest = focusD;
       } else if (det.length) this.telemetry.botSees++;
+
       const nowIds = new Set();
       for (const o of det) {
         const d = dist(e, o);
@@ -510,27 +523,36 @@ export class World {
         if (pd !== undefined) {
           const delta = d - pd;
           if (isClark) {
-            // Engagement shaping: closing on something he can currently
-            // perceive. Deleted entirely under the 'sparse' preset.
-            if (!sparse && delta < 0) e.pendingReward += -delta * R.closing;
-          } else if (delta > 0) {
-            // survivors: rewarded for opening the gap on a perceived Clark
+            if (!sparse && o === focus) {
+              // Three potentials on the tracked target. All differences, never
+              // per-tick payments: this is standard potential-based shaping, so
+              // it cannot change which policies are optimal, only how easy they
+              // are to find.
+              e.pendingReward += -delta * R.closing;
+              const near = (x) => R.near * (1 - Math.min(x, 3) / 3);
+              e.pendingReward += near(d) - near(pd);
+            }
+          } else {
+            // survivors: paid for opening the gap, and charged for closing it
             e.pendingReward += delta * R.flee;
           }
         }
         prev.set(o.id, d);
-        if (isClark && !sparse && o === det[0]) {
-          // ...and turning to look at it. Without this the very first bites are
-          // pure luck: nothing in the reward stream has any opinion about which
-          // way he is facing until he is already inside biting range.
-          const dx = o.x - e.x;
-          const dz = o.z - e.z;
-          const dd = Math.hypot(dx, dz) || 1;
-          const facing = (dx / dd) * Math.sin(e.yaw) + (dz / dd) * Math.cos(e.yaw);
-          const prevFacing = prev.get('facing:' + o.id);
-          if (prevFacing !== undefined && facing > prevFacing) e.pendingReward += (facing - prevFacing) * R.orient;
-          prev.set('facing:' + o.id, facing);
-        }
+      }
+      if (isClark && !sparse && focus) {
+        // ...and facing the tracked target, as a potential: turning towards it
+        // pays, turning away costs. Without this the very first bites are pure
+        // luck, because nothing in the reward stream had an opinion about which
+        // way he was facing until he was already inside biting range.
+        const dx = focus.x - e.x;
+        const dz = focus.z - e.z;
+        const dd = Math.hypot(dx, dz) || 1;
+        const facing = (dx / dd) * Math.sin(e.yaw) + (dz / dd) * Math.cos(e.yaw);
+        const prevFacing = prev.get('face');
+        if (prevFacing !== undefined) e.pendingReward += (facing - prevFacing) * R.orient;
+        prev.set('face', facing);
+      } else if (prev.has('face')) {
+        prev.delete('face');
       }
       for (const id of [...prev.keys()]) if (!nowIds.has(id)) prev.delete(id);
 
