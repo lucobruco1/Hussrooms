@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HUS$ROOMS — Cap'n Clark</title>
+    <link rel="stylesheet" href="src/ui/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="overlay" class="overlay"></div>
+
+    <div id="loading">
+      <div class="big">HUS$ROOMS</div>
+      <div class="small">
+        Loading the level and the neural networks. Cap'n Clark begins this run with no idea what a
+        human is. Press <b>Tab</b> for the EfficientZero lab panel and watch him learn.
+      </div>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+    <script>
+      // If the module never boots (no WebGL / no module support), say so instead
+      // of showing a black screen.
+      setTimeout(() => {
+        const el = document.getElementById('loading');
+        if (el && !el.classList.contains('hidden')) {
+          el.querySelector('.small').innerHTML =
+            'Still loading… If this never finishes, your browser may not support WebGL2 or ES modules.';
+        }
+      }, 8000);
+    </script>
+  </body>
+</html>

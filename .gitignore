@@ -1,0 +1,11 @@
+# dependencies: the game itself has none (three.js is vendored in vendor/)
+node_modules/
+
+# trained brains / checkpoints (regenerate with tools/train.mjs)
+public/*.json
+*.log
+
+# editor / OS noise
+.DS_Store
+.idea/
+.vscode/
